@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Contratos Eventuais</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Arial', sans-serif; }
+        canvas { max-width: 100%; }
+        .hidden { display: none; }
+        input:invalid, select:invalid { border-color: red; }
+        .error-message { color: red; font-size: 0.875rem; }
+        th { position: sticky; top: 0; background: #e5e7eb; z-index: 10; }
+        .tab { cursor: pointer; }
+        .tab.active { background: #3b82f6; color: white; }
+        @media (max-width: 640px) {
+            .filter-section { display: none; }
+            .filter-section.active { display: block; }
+        }
+        .loading::after {
+            content: 'Carregando...';
+            display: inline-block;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-6">
+    <div class="container mx-auto max-w-7xl">
+        <h1 class="text-3xl font-bold mb-6 text-center text-gray-800">Controle de Contratos Eventuais</h1>
+
+        <!-- Form to Add New Event -->
+        <div class="bg-white p-6 rounded-lg shadow-lg mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Adicionar Novo Evento</h2>
+            <form id="eventForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                    <input type="text" id="empresa" placeholder="Empresa" class="border p-2 rounded w-full" title="Nome da empresa" required>
+                    <p id="empresaError" class="error-message hidden">Campo obrigatório</p>
+                </div>
+                <div>
+                    <select id="mesEvento" class="border p-2 rounded w-full" title="Mês do evento" required>
+                        <option value="">Mês do Evento</option>
+                        <option value="Janeiro">Janeiro</option>
+                        <option value="Fevereiro">Fevereiro</option>
+                        <option value="Março">Março</option>
+                        <option value="Abril">Abril</option>
+                        <option value="Maio">Maio</option>
+                        <option value="Junho">Junho</option>
+                        <option value="Julho">Julho</option>
+                        <option value="Agosto">Agosto</option>
+                        <option value="Setembro">Setembro</option>
+                        <option value="Outubro">Outubro</option>
+                        <option value="Novembro">Novembro</option>
+                        <option value="Dezembro">Dezembro</option>
+                    </select>
+                    <p id="mesEventoError" class="error-message hidden">Selecione um mês</p>
+                </div>
+                <div>
+                    <input type="number" id="anoEvento" placeholder="Ano do Evento" min="2000" max="2099" class="border p-2 rounded w-full" title="Ano do evento" required>
+                    <p id="anoEventoError" class="error-message hidden">Ano deve ser entre 2000 e 2099</p>
+                </div>
+                <div>
+                    <input type="text" id="cliente" placeholder="Cliente" class="border p-2 rounded w-full" title="Nome do cliente" required>
+                    <p id="clienteError" class="error-message hidden">Campo obrigatório</p>
+                </div>
+                <div>
+                    <input type="text" id="unidade" placeholder="Unidade" class="border p-2 rounded w-full" title="Unidade organizacional" required>
+                    <p id="unidadeError" class="error-message hidden">Campo obrigatório</p>
+                </div>
+                <div>
+                    <input type="text" id="nomeEvento" placeholder="Nome do Evento" class="border p-2 rounded w-full" title="Nome do evento" required>
+                    <p id="nomeEventoError" class="error-message hidden">Campo obrigatório</p>
+                </div>
+                <div>
+                    <select id="tipoServico" class="border p-2 rounded w-full" title="Tipo de serviço prestado" required>
+                        <option value="">Tipo de Serviço</option>
+                        <option value="Limpeza">Limpeza</option>
+                        <option value="Vigilância">Vigilância</option>
+                        <option value="Recepção">Recepção</option>
+                    </select>
+                    <p id="tipoServicoError" class="error-message hidden">Selecione um serviço</p>
+                </div>
+                <div>
+                    <input type="date" id="dataInicio" class="border p-2 rounded w-full" title="Data de início do evento" required>
+                    <p id="dataInicioError" class="error-message hidden">Selecione uma data</p>
+                </div>
+                <div>
+                    <input type="date" id="dataTermino" class="border p-2 rounded w-full" title="Data de término do evento" required>
+                    <p id="dataTerminoError" class="error-message hidden">Data de Término deve ser posterior à Data de Início</p>
+                </div>
+                <div>
+                    <input type="number" id="diasEvento" placeholder="Dias de Evento" class="border p-2 rounded w-full" title="Número de dias do evento" readonly>
+                </div>
+                <div>
+                    <input type="number" id="valorTotal" placeholder="Valor Total (R$)" min="0" step="0.01" class="border p-2 rounded w-full" title="Valor total do evento" required>
+                    <p id="valorTotalError" class="error-message hidden">Valor deve ser positivo</p>
+                </div>
+                <div class="col-span-full flex space-x-4">
+                    <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 flex-1">Adicionar Evento</button>
+                    <button type="reset" id="resetForm" class="bg-gray-400 text-white p-2 rounded hover:bg-gray-500 flex-1">Limpar Formulário</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Main Table -->
+        <div class="bg-white p-6 rounded-lg shadow-lg mb-6 overflow-x-auto">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Lista de Eventos</h2>
+            <table id="eventTable" class="min-w-full border-collapse">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="border p-2">Empresa</th>
+                        <th class="border p-2">Mês do Evento</th>
+                        <th class="border p-2">Ano do Evento</th>
+                        <th class="border p-2">Cliente</th>
+                        <th class="border p-2">Unidade</th>
+                        <th class="border p-2">Nome do Evento</th>
+                        <th class="border p-2">Tipo de Serviço</th>
+                        <th class="border p-2">Data de Início</th>
+                        <th class="border p-2">Data de Término</th>
+                        <th class="border p-2">Dias de Evento</th>
+                        <th class="border p-2">Valor Total (R$)</th>
+                    </tr>
+                </thead>
+                <tbody id="eventTableBody"></tbody>
+            </table>
+            <div class="mt-4 flex space-x-4">
+                <button id="exportExcel" class="bg-green-600 text-white p-2 rounded hover:bg-green-700">Exportar para Excel</button>
+                <button id="backupData" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Fazer Backup dos Dados</button>
+                <button id="clearData" class="bg-red-600 text-white p-2 rounded hover:bg-red-700">Limpar Todos os Dados</button>
+            </div>
+        </div>
+
+        <!-- Events by Year Tabs -->
+        <div class="bg-white p-6 rounded-lg shadow-lg mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Eventos por Ano</h2>
+            <div id="yearTabs" class="flex flex-wrap mb-4"></div>
+            <div class="overflow-x-auto">
+                <table id="yearTable" class="min-w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-200">
+                            <th class="border p-2">Empresa</th>
+                            <th class="border p-2">Mês do Evento</th>
+                            <th class="border p-2">Ano do Evento</th>
+                            <th class="border p-2">Cliente</th>
+                            <th class="border p-2">Unidade</th>
+                            <th class="border p-2">Nome do Evento</th>
+                            <th class="border p-2">Tipo de Serviço</th>
+                            <th class="border p-2">Data de Início</th>
+                            <th class="border p-2">Data de Término</th>
+                            <th class="border p-2">Dias de Evento</th>
+                            <th class="border p-2">Valor Total (R$)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="yearTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Summary Table -->
+        <div class="bg-white p-6 rounded-lg shadow-lg mb-6 overflow-x-auto">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Resumo por Unidade, Mês e Ano</h2>
+            <table id="summaryTable" class="min-w-full border-collapse">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="border p-2">Unidade</th>
+                        <th class="border p-2">Mês</th>
+                        <th class="border p-2">Ano</th>
+                        <th class="border p-2">Total de Eventos</th>
+                        <th class="border p-2">Valor Total (R$)</th>
+                    </tr>
+                </thead>
+                <tbody id="summaryTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Dashboard -->
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Dashboard de Análise</h2>
+            <!-- Summary Card -->
+            <div class="mb-6 p-4 bg-blue-100 rounded-lg shadow">
+                <h3 class="text-lg font-medium text-blue-800">Resumo Geral</h3>
+                <p id="totalEventos" class="text-blue-600">Total de Eventos: 0</p>
+                <p id="totalValor" class="text-blue-600">Valor Total: R$ 0,00</p>
+                <p id="mediaDias" class="text-blue-600">Média de Dias por Evento: 0</p>
+                <p id="totalClientes" class="text-blue-600">Total de Clientes: 0</p>
+                <p id="totalUnidades" class="text-blue-600">Total de Unidades: 0</p>
+            </div>
+            <!-- Filters -->
+            <div class="mb-6">
+                <button id="toggleFilters" class="sm:hidden bg-gray-200 p-2 rounded mb-2 w-full text-gray-700">Mostrar/Ocultar Filtros</button>
+                <div id="filterSection" class="filter-section grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <select id="filterEmpresa" class="border p-2 rounded" title="Filtrar por empresa">
+                        <option value="">Filtrar por Empresa</option>
+                    </select>
+                    <select id="filterUnidade" class="border p-2 rounded" title="Filtrar por unidade">
+                        <option value="">Filtrar por Unidade</option>
+                    </select>
+                    <select id="filterMes" class="border p-2 rounded" title="Filtrar por mês">
+                        <option value="">Filtrar por Mês</option>
+                        <option value="Janeiro">Janeiro</option>
+                        <option value="Fevereiro">Fevereiro</option>
+                        <option value="Março">Março</option>
+                        <option value="Abril">Abril</option>
+                        <option value="Maio">Maio</option>
+                        <option value="Junho">Junho</option>
+                        <option value="Julho">Julho</option>
+                        <option value="Agosto">Agosto</option>
+                        <option value="Setembro">Setembro</option>
+                        <option value="Outubro">Outubro</option>
+                        <option value="Novembro">Novembro</option>
+                        <option value="Dezembro">Dezembro</option>
+                    </select>
+                    <input type="number" id="filterAno" placeholder="Filtrar por Ano" min="2000" max="2099" class="border p-2 rounded" title="Filtrar por ano">
+                    <select id="filterTipoServico" class="border p-2 rounded" title="Filtrar por tipo de serviço">
+                        <option value="">Filtrar por Tipo de Serviço</option>
+                        <option value="Limpeza">Limpeza</option>
+                        <option value="Vigilância">Vigilância</option>
+                        <option value="Recepção">Recepção</option>
+                    </select>
+                    <button id="resetFilters" class="bg-gray-400 text-white p-2 rounded hover:bg-gray-500 col-span-full md:col-span-1">Limpar Filtros</button>
+                </div>
+            </div>
+            <!-- Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-lg font-medium mb-2 text-gray-600">Valores por Empresa</h3>
+                    <canvas id="companyChart"></canvas>
+                    <button class="downloadChart mt-2 bg-blue-500 text-white p-1 rounded hover:bg-blue-600" data-chart="companyChart">Baixar Gráfico</button>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium mb-2 text-gray-600">Distribuição por Unidade</h3>
+                    <canvas id="unitChart"></canvas>
+                    <button class="downloadChart mt-2 bg-blue-500 text-white p-1 rounded hover:bg-blue-600" data-chart="unitChart">Baixar Gráfico</button>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium mb-2 text-gray-600">Valores por Mês/Ano</h3>
+                    <canvas id="timeChart"></canvas>
+                    <button class="downloadChart mt-2 bg-blue-500 text-white p-1 rounded hover:bg-blue-600" data-chart="timeChart">Baixar Gráfico</button>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium mb-2 text-gray-600">Valores por Tipo de Serviço</h3>
+                    <canvas id="serviceChart"></canvas>
+                    <button class="downloadChart mt-2 bg-blue-500 text-white p-1 rounded hover:bg-blue-600" data-chart="serviceChart">Baixar Gráfico</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data storage with localStorage
+        let events = JSON.parse(localStorage.getItem('events')) || [
+            {
+                empresa: "Empresa A", mesEvento: "Janeiro", anoEvento: 2025, cliente: "Cliente 1", unidade: "Unidade 1",
+                nomeEvento: "Feira de Tecnologia", tipoServico: "Limpeza", dataInicio: "2025-01-10", dataTermino: "2025-01-12",
+                diasEvento: 3, valorTotal: 15000
+            },
+            {
+                empresa: "Empresa B", mesEvento: "Fevereiro", anoEvento: 2024, cliente: "Cliente 2", unidade: "Unidade 2",
+                nomeEvento: "Conferência", tipoServico: "Vigilância", dataInicio: "2024-02-15", dataTermino: "2024-02-16",
+                diasEvento: 2, valorTotal: 6000
+            }
+        ];
+
+        // Save to localStorage
+        function saveEvents() {
+            localStorage.setItem('events', JSON.stringify(events));
+        }
+
+        // Calculate event days in form
+        function calculateEventDays() {
+            const dataInicio = new Date(document.getElementById('dataInicio').value);
+            const dataTermino = new Date(document.getElementById('dataTermino').value);
+            const error = document.getElementById('dataTerminoError');
+            if (dataInicio && dataTermino) {
+                if (dataTermino >= dataInicio) {
+                    const diffTime = dataTermino - dataInicio;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Include final day
+                    document.getElementById('diasEvento').value = diffDays;
+                    error.classList.add('hidden');
+                } else {
+                    document.getElementById('diasEvento').value = '';
+                    error.classList.remove('hidden');
+                }
+            } else {
+                document.getElementById('diasEvento').value = '';
+                error.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('dataInicio').addEventListener('change', calculateEventDays);
+        document.getElementById('dataTermino').addEventListener('change', calculateEventDays);
+
+        // Sanitize input
+        function sanitizeInput(value) {
+            return value.replace(/[<>"'&]/g, '');
+        }
+
+        // Validate form inputs
+        function validateForm() {
+            let isValid = true;
+            const fields = ['empresa', 'mesEvento', 'anoEvento', 'cliente', 'unidade', 'nomeEvento', 'tipoServico', 'dataInicio', 'dataTermino', 'valorTotal'];
+            fields.forEach(field => {
+                const input = document.getElementById(field);
+                const error = document.getElementById(`${field}Error`);
+                if (!input.value || (field === 'valorTotal' && input.value <= 0) || (field === 'anoEvento' && (input.value < 2000 || input.value > 2099))) {
+                    error.classList.remove('hidden');
+                    isValid = false;
+                } else {
+                    error.classList.add('hidden');
+                }
+            });
+            const dataInicio = new Date(document.getElementById('dataInicio').value);
+            const dataTermino = new Date(document.getElementById('dataTermino').value);
+            if (dataInicio && dataTermino && dataTermino < dataInicio) {
+                document.getElementById('dataTerminoError').classList.remove('hidden');
+                isValid = false;
+            }
+            return isValid;
+        }
+
+        // Update main table
+        function updateTable(data = events) {
+            const tbody = document.getElementById('eventTableBody');
+            tbody.innerHTML = '';
+            data.forEach(event => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border p-2">${event.empresa}</td>
+                    <td class="border p-2">${event.mesEvento}</td>
+                    <td class="border p-2">${event.anoEvento}</td>
+                    <td class="border p-2">${event.cliente}</td>
+                    <td class="border p-2">${event.unidade}</td>
+                    <td class="border p-2">${event.nomeEvento}</td>
+                    <td class="border p-2">${event.tipoServico}</td>
+                    <td class="border p-2">${event.dataInicio}</td>
+                    <td class="border p-2">${event.dataTermino}</td>
+                    <td class="border p-2">${event.diasEvento}</td>
+                    <td class="border p-2">${event.valorTotal.toFixed(2)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Update year tabs and table
+        function updateYearTabs(selectedYear = null) {
+            const years = [...new Set(events.map(e => e.anoEvento))].sort();
+            const tabsContainer = document.getElementById('yearTabs');
+            tabsContainer.innerHTML = '<div class="tab bg-gray-200 p-2 rounded mr-2 mb-2" data-year="all">Todos</div>';
+            years.forEach(year => {
+                tabsContainer.innerHTML += `<div class="tab bg-gray-200 p-2 rounded mr-2 mb-2" data-year="${year}">${year}</div>`;
+            });
+
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const year = tab.getAttribute('data-year');
+                    const filtered = year === 'all' ? events : events.filter(e => e.anoEvento == year);
+                    updateYearTable(filtered);
+                });
+            });
+
+            if (selectedYear && years.includes(selectedYear)) {
+                const tab = document.querySelector(`.tab[data-year="${selectedYear}"]`);
+                if (tab) tab.classList.add('active');
+                updateYearTable(events.filter(e => e.anoEvento == selectedYear));
+            } else {
+                document.querySelector('.tab[data-year="all"]').classList.add('active');
+                updateYearTable(events);
+            }
+        }
+
+        function updateYearTable(data) {
+            const tbody = document.getElementById('yearTableBody');
+            tbody.innerHTML = '';
+            data.forEach(event => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border p-2">${event.empresa}</td>
+                    <td class="border p-2">${event.mesEvento}</td>
+                    <td class="border p-2">${event.anoEvento}</td>
+                    <td class="border p-2">${event.cliente}</td>
+                    <td class="border p-2">${event.unidade}</td>
+                    <td class="border p-2">${event.nomeEvento}</td>
+                    <td class="border p-2">${event.tipoServico}</td>
+                    <td class="border p-2">${event.dataInicio}</td>
+                    <td class="border p-2">${event.dataTermino}</td>
+                    <td class="border p-2">${event.diasEvento}</td>
+                    <td class="border p-2">${event.valorTotal.toFixed(2)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Update summary table
+        function updateSummary() {
+            const summary = {};
+            events.forEach(event => {
+                const key = `${event.unidade}-${event.mesEvento}-${event.anoEvento}`;
+                if (!summary[key]) {
+                    summary[key] = { unidade: event.unidade, mes: event.mesEvento, ano: event.anoEvento, count: 0, total: 0 };
+                }
+                summary[key].count += 1;
+                summary[key].total += event.valorTotal;
+            });
+
+            const tbody = document.getElementById('summaryTableBody');
+            tbody.innerHTML = '';
+            Object.values(summary).forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border p-2">${item.unidade}</td>
+                    <td class="border p-2">${item.mes}</td>
+                    <td class="border p-2">${item.ano}</td>
+                    <td class="border p-2">${item.count}</td>
+                    <td class="border p-2">${item.total.toFixed(2)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Update filters
+        function updateFilters() {
+            const empresas = [...new Set(events.map(e => e.empresa))].sort();
+            const unidades = [...new Set(events.map(e => e.unidade))].sort();
+            const empresaSelect = document.getElementById('filterEmpresa');
+            const unidadeSelect = document.getElementById('filterUnidade');
+
+            empresaSelect.innerHTML = '<option value="">Filtrar por Empresa</option>';
+            unidadeSelect.innerHTML = '<option value="">Filtrar por Unidade</option>';
+
+            empresas.forEach(empresa => {
+                const option = document.createElement('option');
+                option.value = empresa;
+                option.textContent = empresa;
+                empresaSelect.appendChild(option);
+            });
+
+            unidades.forEach(unidade => {
+                const option = document.createElement('option');
+                option.value = unidade;
+                option.textContent = unidade;
+                unidadeSelect.appendChild(option);
+            });
+        }
+
+        // Update summary card
+        function updateSummaryCard(data = events) {
+            const totalEventos = data.length;
+            const totalValor = data.reduce((sum, event) => sum + event.valorTotal, 0);
+            const mediaDias = data.length > 0 ? (data.reduce((sum, event) => sum + event.diasEvento, 0) / data.length).toFixed(1) : 0;
+            const totalClientes = [...new Set(data.map(e => e.cliente))].length;
+            const totalUnidades = [...new Set(data.map(e => e.unidade))].length;
+            document.getElementById('totalEventos').textContent = `Total de Eventos: ${totalEventos}`;
+            document.getElementById('totalValor').textContent = `Valor Total: R$ ${totalValor.toFixed(2).replace('.', ',')}`;
+            document.getElementById('mediaDias').textContent = `Média de Dias por Evento: ${mediaDias}`;
+            document.getElementById('totalClientes').textContent = `Total de Clientes: ${totalClientes}`;
+            document.getElementById('totalUnidades').textContent = `Total de Unidades: ${totalUnidades}`;
+        }
+
+        // Filter data
+        function filterData() {
+            const empresa = document.getElementById('filterEmpresa').value;
+            const unidade = document.getElementById('filterUnidade').value;
+            const mes = document.getElementById('filterMes').value;
+            const ano = document.getElementById('filterAno').value;
+            const tipoServico = document.getElementById('filterTipoServico').value;
+
+            let filtered = events;
+            if (empresa) filtered = filtered.filter(e => e.empresa === empresa);
+            if (unidade) filtered = filtered.filter(e => e.unidade === unidade);
+            if (mes) filtered = filtered.filter(e => e.mesEvento === mes);
+            if (ano) filtered = filtered.filter(e => e.anoEvento == ano);
+            if (tipoServico) filtered = filtered.filter(e => e.tipoServico === tipoServico);
+
+            updateTable(filtered);
+            updateDashboard(filtered);
+            updateSummaryCard(filtered);
+        }
+
+        // Initialize charts
+        const companyChart = new Chart(document.getElementById('companyChart'), {
+            type: 'bar',
+            data: { labels: [], datasets: [{ label: 'Valor Total (R$)', data: [], backgroundColor: 'rgba(75, 192, 192, 0.6)' }] },
+            options: {
+                scales: { y: { beginAtZero: true, ticks: { callback: value => `R$ ${value.toFixed(2)}` } } },
+                plugins: { tooltip: { callbacks: { label: ctx => `R$ ${ctx.raw.toFixed(2)}` } } }
+            }
+        });
+
+        const unitChart = new Chart(document.getElementById('unitChart'), {
+            type: 'pie',
+            data: { labels: [], datasets: [{ label: 'Eventos', data: [], backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'] }] },
+            options: { plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw} eventos` } } } }
+        });
+
+        const timeChart = new Chart(document.getElementById('timeChart'), {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: 'Valor Total (R$)', data: [], borderColor: '#FF6384', fill: false }] },
+            options: {
+                scales: { y: { beginAtZero: true, ticks: { callback: value => `R$ ${value.toFixed(2)}` } } },
+                plugins: { tooltip: { callbacks: { label: ctx => `R$ ${ctx.raw.toFixed(2)}` } } }
+            }
+        });
+
+        const serviceChart = new Chart(document.getElementById('serviceChart'), {
+            type: 'bar',
+            data: { labels: ['Limpeza', 'Vigilância', 'Recepção'], datasets: [{ label: 'Valor Total (R$)', data: [], backgroundColor: '#36A2EB' }] },
+            options: {
+                scales: { y: { beginAtZero: true, ticks: { callback: value => `R$ ${value.toFixed(2)}` } } },
+                plugins: { tooltip: { callbacks: { label: ctx => `R$ ${ctx.raw.toFixed(2)}` } } }
+            }
+        });
+
+        // Update dashboard
+        function updateDashboard(data = events) {
+            // Company chart
+            const companyData = {};
+            data.forEach(event => {
+                companyData[event.empresa] = (companyData[event.empresa] || 0) + event.valorTotal;
+            });
+            companyChart.data.labels = Object.keys(companyData).sort();
+            companyChart.data.datasets[0].data = Object.values(companyData);
+            companyChart.update();
+
+            // Unit chart
+            const unitData = {};
+            data.forEach(event => {
+                unitData[event.unidade] = (unitData[event.unidade] || 0) + 1;
+            });
+            unitChart.data.labels = Object.keys(unitData).sort();
+            unitChart.data.datasets[0].data = Object.values(unitData);
+            unitChart.update();
+
+            // Time chart
+            const timeData = {};
+            data.forEach(event => {
+                const key = `${event.mesEvento}-${event.anoEvento}`;
+                timeData[key] = (timeData[key] || 0) + event.valorTotal;
+            });
+            const sortedKeys = Object.keys(timeData).sort((a, b) => {
+                const [mesA, anoA] = a.split('-');
+                const [mesB, anoB] = b.split('-');
+                const mesOrder = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+                if (anoA === anoB) return mesOrder.indexOf(mesA) - mesOrder.indexOf(mesB);
+                return anoA - anoB;
+            });
+            timeChart.data.labels = sortedKeys;
+            timeChart.data.datasets[0].data = sortedKeys.map(key => timeData[key]);
+            timeChart.update();
+
+            // Service chart
+            const serviceData = { Limpeza: 0, Vigilância: 0, Recepção: 0 };
+            data.forEach(event => {
+                serviceData[event.tipoServico] += event.valorTotal;
+            });
+            serviceChart.data.datasets[0].data = [serviceData.Limpeza, serviceData.Vigilância, serviceData.Recepção];
+            serviceChart.update();
+        }
+
+        // Form submission
+        document.getElementById('eventForm').addEventListener('submit', e => {
+            e.preventDefault();
+            if (!validateForm()) return;
+            if (!confirm('Deseja adicionar este evento?')) return;
+            const newEvent = {
+                empresa: sanitizeInput(document.getElementById('empresa').value),
+                mesEvento: document.getElementById('mesEvento').value,
+                anoEvento: document.getElementById('anoEvento').value,
+                cliente: sanitizeInput(document.getElementById('cliente').value),
+                unidade: sanitizeInput(document.getElementById('unidade').value),
+                nomeEvento: sanitizeInput(document.getElementById('nomeEvento').value),
+                tipoServico: document.getElementById('tipoServico').value,
+                dataInicio: document.getElementById('dataInicio').value,
+                dataTermino: document.getElementById('dataTermino').value,
+                diasEvento: parseInt(document.getElementById('diasEvento').value),
+                valorTotal: parseFloat(document.getElementById('valorTotal').value)
+            };
+            events.push(newEvent);
+            saveEvents();
+            updateTable();
+            updateYearTabs(newEvent.anoEvento);
+            updateSummary();
+            updateFilters();
+            updateDashboard();
+            updateSummaryCard();
+            e.target.reset();
+            calculateEventDays();
+        });
+
+        // Reset form
+        document.getElementById('resetForm').addEventListener('click', () => {
+            document.getElementById('eventForm').reset();
+            calculateEventDays();
+            document.querySelectorAll('.error-message').forEach(el => el.classList.add('hidden'));
+        });
+
+        // Clear all data
+        document.getElementById('clearData').addEventListener('click', () => {
+            if (confirm('Tem certeza que deseja limpar todos os dados? Esta ação não pode ser desfeita.')) {
+                events = [];
+                saveEvents();
+                updateTable();
+                updateYearTabs();
+                updateSummary();
+                updateFilters();
+                updateDashboard();
+                updateSummaryCard();
+            }
+        });
+
+        // Backup data
+        document.getElementById('backupData').addEventListener('click', () => {
+            const dataStr = JSON.stringify(events);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'eventos_backup.json';
+            link.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // Excel export
+        document.getElementById('exportExcel').addEventListener('click', () => {
+            const button = document.getElementById('exportExcel');
+            button.classList.add('loading');
+            setTimeout(() => {
+                const wb = XLSX.utils.book_new();
+
+                // Main table
+                const mainData = events.map(event => ({
+                    Empresa: event.empresa,
+                    'Mês do Evento': event.mesEvento,
+                    'Ano do Evento': event.anoEvento,
+                    Cliente: event.cliente,
+                    Unidade: event.unidade,
+                    'Nome do Evento': event.nomeEvento,
+                    'Tipo de Serviço': event.tipoServico,
+                    'Data de Início': new Date(event.dataInicio).toLocaleDateString('pt-BR'),
+                    'Data de Término': new Date(event.dataTermino).toLocaleDateString('pt-BR'),
+                    'Dias de Evento': event.diasEvento,
+                    'Valor Total (R$)': event.valorTotal
+                }));
+                const ws1 = XLSX.utils.json_to_sheet(mainData);
+                const range = XLSX.utils.decode_range(ws1['!ref']);
+                for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+                    const cell = ws1[XLSX.utils.encode_cell({ c: 10, r: R })]; // Valor Total column
+                    if (cell) cell.z = 'R$ #,##0.00';
+                }
+                ws1['!cols'] = Array(11).fill({ wch: 15 });
+                XLSX.utils.book_append_sheet(wb, ws1, 'Eventos');
+
+                // Summary table
+                const summary = {};
+                events.forEach(event => {
+                    const key = `${event.unidade}-${event.mesEvento}-${event.anoEvento}`;
+                    if (!summary[key]) {
+                        summary[key] = { Unidade: event.unidade, Mês: event.mesEvento, Ano: event.anoEvento, 'Total de Eventos': 0, 'Valor Total (R$)': 0 };
+                    }
+                    summary[key]['Total de Eventos'] += 1;
+                    summary[key]['Valor Total (R$)'] += event.valorTotal;
+                });
+                const ws2 = XLSX.utils.json_to_sheet(Object.values(summary));
+                const range2 = XLSX.utils.decode_range(ws2['!ref']);
+                for (let R = range2.s.r + 1; R <= range2.e.r; ++R) {
+                    const cell = ws2[XLSX.utils.encode_cell({ c: 4, r: R })]; // Valor Total column
+                    if (cell) cell.z = 'R$ #,##0.00';
+                }
+                ws2['!cols'] = Array(5).fill({ wch: 15 });
+                XLSX.utils.book_append_sheet(wb, ws2, 'Resumo');
+
+                // Events by year
+                const years = [...new Set(events.map(e => e.anoEvento))].sort();
+                years.forEach(year => {
+                    const yearData = events.filter(e => e.anoEvento == year).map(event => ({
+                        Empresa: event.empresa,
+                        'Mês do Evento': event.mesEvento,
+                        'Ano do Evento': event.anoEvento,
+                        Cliente: event.cliente,
+                        Unidade: event.unidade,
+                        'Nome do Evento': event.nomeEvento,
+                        'Tipo de Serviço': event.tipoServico,
+                        'Data de Início': new Date(event.dataInicio).toLocaleDateString('pt-BR'),
+                        'Data de Término': new Date(event.dataTermino).toLocaleDateString('pt-BR'),
+                        'Dias de Evento': event.diasEvento,
+                        'Valor Total (R$)': event.valorTotal
+                    }));
+                    const ws = XLSX.utils.json_to_sheet(yearData);
+                    const range = XLSX.utils.decode_range(ws['!ref']);
+                    for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+                        const cell = ws[XLSX.utils.encode_cell({ c: 10, r: R })]; // Valor Total column
+                        if (cell) cell.z = 'R$ #,##0.00';
+                    }
+                    ws['!cols'] = Array(11).fill({ wch: 15 });
+                    XLSX.utils.book_append_sheet(wb, ws, `Eventos ${year}`);
+                });
+
+                XLSX.write_file(wb, 'Contratos_Eventuais.xlsx');
+                button.classList.remove('loading');
+            }, 100);
+        });
+
+        // Download chart
+        document.querySelectorAll('.downloadChart').forEach(button => {
+            button.addEventListener('click', () => {
+                const chartId = button.getAttribute('data-chart');
+                const canvas = document.getElementById(chartId);
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = `${chartId}.png`;
+                link.click();
+            });
+        });
+
+        // Toggle filters on mobile
+        document.getElementById('toggleFilters').addEventListener('click', () => {
+            const filterSection = document.getElementById('filterSection');
+            filterSection.classList.toggle('active');
+        });
+
+        // Reset filters
+        document.getElementById('resetFilters').addEventListener('click', () => {
+            document.getElementById('filterEmpresa').value = '';
+            document.getElementById('filterUnidade').value = '';
+            document.getElementById('filterMes').value = '';
+            document.getElementById('filterAno').value = '';
+            document.getElementById('filterTipoServico').value = '';
+            filterData();
+        });
+
+        // Filter events
+        document.getElementById('filterEmpresa').addEventListener('change', filterData);
+        document.getElementById('filterUnidade').addEventListener('change', filterData);
+        document.getElementById('filterMes').addEventListener('change', filterData);
+        document.getElementById('filterAno').addEventListener('input', filterData);
+        document.getElementById('filterTipoServico').addEventListener('change', filterData);
+
+        // Initial render
+        updateTable();
+        updateYearTabs();
+        updateSummary();
+        updateFilters();
+        updateDashboard();
+        updateSummaryCard();
+    </script>
+</body>
+</html>
